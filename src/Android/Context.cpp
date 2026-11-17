@@ -24,6 +24,7 @@ Copyright_License {
 #include "Context.hpp"
 #include "Java/Class.hxx"
 #include "Java/String.hxx"
+#include "Java/File.hxx"
 
 jobject
 Context::GetSystemService(JNIEnv *env, jstring name)
@@ -53,4 +54,28 @@ jobject
 Context::GetVibrator(JNIEnv *env)
 {
   return GetSystemService(env, "vibrator");
+}
+
+char *
+Context::GetExternalFilesDir(JNIEnv *env, char *buffer, size_t max_size)
+{
+  assert(env != nullptr);
+
+  Java::Class cls(env, env->GetObjectClass(Get()));
+  jmethodID method = env->GetMethodID(cls, "getExternalFilesDir",
+                                      "(Ljava/lang/String;)Ljava/io/File;");
+  assert(method);
+
+  jobject file = env->CallObjectMethod(Get(), method, (jstring)nullptr);
+  if (file == nullptr)
+    return nullptr;
+
+  jstring path = Java::File::getAbsolutePath(env, file);
+  env->DeleteLocalRef(file);
+  if (path == nullptr)
+    return nullptr;
+
+  Java::String path2(env, path);
+  path2.CopyTo(env, buffer, max_size);
+  return buffer;
 }

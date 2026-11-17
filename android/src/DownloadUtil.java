@@ -37,8 +37,14 @@ class DownloadUtil extends BroadcastReceiver {
 
   static void Initialise(Context context) {
     instance = new DownloadUtil();
-    context.registerReceiver(instance,
-                             new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+    IntentFilter filter =
+      new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
+    if (android.os.Build.VERSION.SDK_INT >= 33)
+      /* sent by the DownloadManager process, so it must be exported
+         (Android 14 requires an explicit flag) */
+      context.registerReceiver(instance, filter, Context.RECEIVER_EXPORTED);
+    else
+      context.registerReceiver(instance, filter);
   }
 
   static void Deinitialise(Context context) {

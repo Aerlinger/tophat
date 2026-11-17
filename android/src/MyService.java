@@ -24,9 +24,11 @@ package org.tophat;
 
 import android.app.Service;
 import android.app.Notification;
+import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.Binder;
@@ -48,6 +50,7 @@ import android.util.Log;
  */
 public class MyService extends Service {
   private static final String TAG = "TopHat";
+  private static final String CHANNEL_ID = "running";
 
   /**
    * Hack: this is set by onCreate(), to support the "testing"
@@ -69,19 +72,41 @@ public class MyService extends Service {
   private void onStart() {
     /* add an icon to the notification area while XCSoar runs, to
        remind the user that we're sucking his battery empty */
-    Notification notification = new Notification(R.drawable.notification_icon, null,
-                                                 System.currentTimeMillis());
     Intent intent2 = new Intent(this, mainActivityClass);
+    int piFlags = Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0;
     PendingIntent contentIntent =
-      PendingIntent.getActivity(this, 0, intent2, 0);
-    notification.setLatestEventInfo(this, "TopHat", "Top Hat is running",
-                                    contentIntent);
-    notification.flags |= Notification.FLAG_ONGOING_EVENT;
+      PendingIntent.getActivity(this, 0, intent2, piFlags);
 
-    notificationManager.notify(1, notification);
+    Notification.Builder builder;
+    if (Build.VERSION.SDK_INT >= 26) {
+      NotificationChannel channel =
+        new NotificationChannel(CHANNEL_ID, "Top Hat running",
+                                NotificationManager.IMPORTANCE_LOW);
+      notificationManager.createNotificationChannel(channel);
+      builder = new Notification.Builder(this, CHANNEL_ID);
+    } else {
+      builder = new Notification.Builder(this);
+    }
 
-    if (Build.VERSION.SDK_INT >= 5)
-      APILevel5.startForeground(this, 1, notification);
+    Notification notification = builder
+      .setSmallIcon(R.drawable.notification_icon)
+      .setContentTitle("TopHat")
+      .setContentText("Top Hat is running")
+      .setContentIntent(contentIntent)
+      .setOngoing(true)
+      .build();
+
+    try {
+      if (Build.VERSION.SDK_INT >= 29)
+        startForeground(1, notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+      else
+        startForeground(1, notification);
+    } catch (RuntimeException e) {
+      /* Android 14+ refuses a "location" foreground service without
+         location permission; keep running as a plain service */
+      Log.w(TAG, "startForeground() failed", e);
+    }
   }
 
   @Override public void onStart(Intent intent, int startId) {

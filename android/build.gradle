@@ -1,0 +1,88 @@
+// Packages the TopHat APK.
+//
+// The native library and generated resources (PNG bitmaps, OGG sounds)
+// are produced by the top-level Makefile; run "make TARGET=ANDROID
+// android-debug" (or android-release) from the repository root rather
+// than invoking Gradle directly.  The Makefile passes the location of
+// its output directory via -PtophatOutput=...
+
+plugins {
+    id 'com.android.application' version '8.7.3'
+}
+
+def tophatOutput = file(project.findProperty('tophatOutput') ?: "${rootDir}/../output/ANDROID")
+def ioio = 'ioio/software'
+
+// keep Gradle's intermediates next to the Makefile's output, not in the source tree
+layout.buildDirectory = file("${tophatOutput}/gradle")
+
+def keystorePath = project.findProperty('tophatKeystore')
+def hasKeystore = keystorePath != null && file(keystorePath).exists()
+
+android {
+    namespace 'org.tophat'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'org.tophat'
+        minSdk 21
+        targetSdk 35
+        versionCode 13
+        versionName '2.2.3'
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = [
+                'src',
+                "${ioio}/IOIOLib/src",
+                "${ioio}/IOIOLib/target/android/src",
+                "${ioio}/IOIOLibAccessory/src",
+                "${ioio}/IOIOLibBT/src",
+                "${ioio}/IOIOLibAndroidDevice/src",
+            ]
+            java.exclude 'testing/**'
+            // staged by the Makefile (generated files without "dirstamp" markers)
+            res.srcDirs = ['res', "${tophatOutput}/build/staged/res"]
+            jniLibs.srcDirs = ["${tophatOutput}/build/staged/jniLibs"]
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    signingConfigs {
+        release {
+            // Supplied by the Makefile / environment; unsigned if absent.
+            if (hasKeystore) {
+                storeFile file(keystorePath)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASS')
+                keyAlias project.findProperty('tophatKeyAlias') ?: 'mk'
+                keyPassword System.getenv('ANDROID_KEY_PASS') ?: System.getenv('ANDROID_KEYSTORE_PASS')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (hasKeystore) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // Store .so uncompressed and page-aligned (required for 16 KB pages).
+            useLegacyPackaging false
+        }
+    }
+
+    lint {
+        abortOnError false
+    }
+}

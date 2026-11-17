@@ -124,6 +124,11 @@ public class InternalGPS
            was: "provider=gps" - no idea what that means */
         setConnectedSafe(0);
         return;
+      } catch (SecurityException e) {
+        /* location permission was not granted by the user */
+        Log.w(TAG, "No permission to access the GPS", e);
+        setConnectedSafe(0);
+        return;
       }
 
       sensorManager.registerListener(this, accelerometer,

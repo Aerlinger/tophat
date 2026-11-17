@@ -45,6 +45,9 @@ import android.content.ComponentName;
 import android.util.Log;
 import android.provider.Settings;
 import android.view.View;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import java.util.ArrayList;
 
 public class XCSoar extends Activity {
   private static final String TAG = "TopHat";
@@ -60,6 +63,58 @@ public class XCSoar extends Activity {
   PowerManager.WakeLock wakeLock;
 
   BatteryReceiver batteryReceiver = new BatteryReceiver();
+
+  private static final int PERMISSION_REQUEST_CODE = 1;
+
+  /**
+   * True while the runtime permission dialog is showing; native
+   * initialisation is deferred until the user has answered, so the
+   * GPS/Bluetooth subscriptions are created with the permissions in
+   * place.
+   */
+  private boolean permissionsPending = false;
+
+  private boolean resumed = false;
+
+  private void addIfMissing(ArrayList<String> list, String permission) {
+    if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED)
+      list.add(permission);
+  }
+
+  private void requestRuntimePermissions() {
+    if (Build.VERSION.SDK_INT < 23)
+      return;
+
+    ArrayList<String> missing = new ArrayList<String>();
+    addIfMissing(missing, Manifest.permission.ACCESS_FINE_LOCATION);
+    addIfMissing(missing, Manifest.permission.ACCESS_COARSE_LOCATION);
+    if (Build.VERSION.SDK_INT >= 31) {
+      addIfMissing(missing, Manifest.permission.BLUETOOTH_SCAN);
+      addIfMissing(missing, Manifest.permission.BLUETOOTH_CONNECT);
+    }
+    if (Build.VERSION.SDK_INT >= 33)
+      addIfMissing(missing, Manifest.permission.POST_NOTIFICATIONS);
+    if (Build.VERSION.SDK_INT <= 28)
+      addIfMissing(missing, Manifest.permission.WRITE_EXTERNAL_STORAGE);
+
+    if (!missing.isEmpty()) {
+      permissionsPending = true;
+      requestPermissions(missing.toArray(new String[0]),
+                         PERMISSION_REQUEST_CODE);
+    }
+  }
+
+  @Override public void onRequestPermissionsResult(int requestCode,
+                                                   String[] permissions,
+                                                   int[] grantResults) {
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    if (requestCode != PERMISSION_REQUEST_CODE)
+      return;
+
+    permissionsPending = false;
+    if (resumed)
+      startNative();
+  }
 
   @Override protected void onCreate(Bundle savedInstanceState) {
     if (serviceClass == null)
@@ -125,6 +180,8 @@ public class XCSoar extends Activity {
 
     registerReceiver(batteryReceiver,
                      new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+
+    requestRuntimePermissions();
   }
 
   private void quit() {
@@ -196,6 +253,7 @@ public class XCSoar extends Activity {
   }
 
   @Override protected void onPause() {
+    resumed = false;
     if (nativeView != null)
       nativeView.onPause();
     super.onPause();
@@ -223,7 +281,13 @@ public class XCSoar extends Activity {
 
   @Override protected void onResume() {
     super.onResume();
+    resumed = true;
 
+    if (!permissionsPending)
+      startNative();
+  }
+
+  private void startNative() {
     startService(new Intent(this, serviceClass));
 
     if (nativeView != null)

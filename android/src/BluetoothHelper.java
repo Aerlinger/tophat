@@ -105,7 +105,14 @@ final class BluetoothHelper {
     if (adapter == null)
       return null;
 
-    Set<BluetoothDevice> devices = adapter.getBondedDevices();
+    Set<BluetoothDevice> devices;
+    try {
+      devices = adapter.getBondedDevices();
+    } catch (SecurityException e) {
+      /* BLUETOOTH_CONNECT not granted (Android 12+) */
+      Log.w(TAG, "No permission to list Bluetooth devices", e);
+      return null;
+    }
     if (devices == null)
       return null;
 
@@ -120,12 +127,22 @@ final class BluetoothHelper {
   }
 
   public static boolean startLeScan(BluetoothAdapter.LeScanCallback cb) {
-    return hasLe && adapter.startLeScan(cb);
+    try {
+      return hasLe && adapter.startLeScan(cb);
+    } catch (SecurityException e) {
+      /* BLUETOOTH_SCAN not granted (Android 12+) */
+      Log.w(TAG, "No permission for Bluetooth LE scan", e);
+      return false;
+    }
   }
 
   public static void stopLeScan(BluetoothAdapter.LeScanCallback cb) {
-    if (hasLe)
-      adapter.stopLeScan(cb);
+    try {
+      if (hasLe)
+        adapter.stopLeScan(cb);
+    } catch (SecurityException e) {
+      Log.w(TAG, "No permission for Bluetooth LE scan", e);
+    }
   }
 
   public static AndroidPort connect(Context context, String address) {

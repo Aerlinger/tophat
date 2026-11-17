@@ -34,6 +34,15 @@ public:
   jobject GetSystemService(JNIEnv *env, jstring name);
   jobject GetSystemService(JNIEnv *env, const char *name);
   jobject GetVibrator(JNIEnv *env);
+
+  /**
+   * Wrapper for Context.getExternalFilesDir(null): the app-specific
+   * directory on shared storage, which needs no permission and is
+   * accessible via USB (Android/data/<package>/files).
+   *
+   * @return buffer on success, nullptr if unavailable
+   */
+  char *GetExternalFilesDir(JNIEnv *env, char *buffer, size_t max_size);
 };
 
 #endif

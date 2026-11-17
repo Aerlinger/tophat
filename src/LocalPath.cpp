@@ -32,6 +32,9 @@ Copyright_License {
 
 #ifdef ANDROID
 #include "Android/Environment.hpp"
+#include "Android/Context.hpp"
+#include "Android/Main.hpp"
+#include "Java/Global.hxx"
 #endif
 
 #ifdef WIN32
@@ -439,6 +442,33 @@ FindDataPath()
       /* found writable XCSoarData: use this SD card */
       return result;
 
+    char buffer[MAX_PATH];
+
+    /* Since Android 10/11 (scoped storage), apps targeting a modern
+       SDK can no longer write to the root of shared storage.  Keep
+       using a legacy XCSoarData folder only if it exists and is
+       still writable (older devices); otherwise use the app-specific
+       directory Android/data/org.tophat/files, which needs no
+       permission and is reachable via USB. */
+    if (Environment::getExternalStorageDirectory(buffer,
+                                                 sizeof(buffer) - 32) != nullptr) {
+      strcat(buffer, "/" XCSDATADIR);
+      if (Directory::Exists(buffer) && access(buffer, W_OK) == 0) {
+        __android_log_print(ANDROID_LOG_DEBUG, "TopHat",
+                            "Using legacy data path '%s'", buffer);
+        return strdup(buffer);
+      }
+    }
+
+    if (context != nullptr &&
+        context->GetExternalFilesDir(Java::GetEnv(), buffer,
+                                     sizeof(buffer) - 32) != nullptr) {
+      strcat(buffer, "/" XCSDATADIR);
+      __android_log_print(ANDROID_LOG_DEBUG, "TopHat",
+                          "Using app-specific data path '%s'", buffer);
+      return strdup(buffer);
+    }
+
     /* hack for Samsung Galaxy S and Samsung Galaxy Tab (which has a
        built-in and an external SD card) */
     struct stat st;
@@ -452,7 +482,6 @@ FindDataPath()
     }
 
     /* try Context.getExternalStoragePublicDirectory() */
-    char buffer[MAX_PATH];
     if (Environment::getExternalStoragePublicDirectory(buffer, sizeof(buffer),
                                                        "XCSoarData") != nullptr) {
       __android_log_print(ANDROID_LOG_DEBUG, "TopHat",

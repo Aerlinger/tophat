@@ -13,25 +13,18 @@ ANDROID_SDK ?= $(firstword $(ANDROID_HOME) $(ANDROID_SDK_ROOT) $(wildcard $(HOME
 ANDROID_SDK_PLATFORM_DIR = $(ANDROID_SDK)/platforms/$(ANDROID_SDK_PLATFORM)
 ANDROID_ABI_DIR = $(ANDROID_BUILD)/libs/$(ANDROID_ABI5)
 
-ANDROID_BUILD_TOOLS_DIR = $(ANDROID_SDK)/build-tools/20.0.0
-ZIPALIGN = $(ANDROID_BUILD_TOOLS_DIR)/zipalign
-
 ANDROID_LIB_NAMES = tophat
 
+# The APK is packaged by Gradle (see android/build.gradle); this
+# Makefile builds the native library and generated resources first.
+# For release builds, set ANDROID_KEYSTORE_PASS (and optionally
+# ANDROID_KEY_PASS) in the environment.
+GRADLE_FLAGS = --console=plain -PtophatOutput=$(abspath $(TARGET_OUTPUT_DIR))
 ifneq ($(V),2)
-ANDROID_TOOL_OPTIONS = --silent
-else
-ANDROID_TOOL_OPTIONS = --verbose
+GRADLE_FLAGS += -q
 endif
-
-JARSIGNER += -digestalg SHA1 -sigalg MD5withRSA
-
-# The environment variable ANDROID_KEYSTORE_PASS may be used to
-# specify the keystore password; if you don't set it, you will be
-# asked interactively
-ifeq ($(origin ANDROID_KEYSTORE_PASS),environment)
-JARSIGNER += -storepass:env ANDROID_KEYSTORE_PASS
-endif
+GRADLE = cd android && ./gradlew $(GRADLE_FLAGS)
+GRADLE_APK_DIR = $(TARGET_OUTPUT_DIR)/gradle/outputs/apk
 
 JAVA_PACKAGE = org.tophat
 CLASS_NAME = $(JAVA_PACKAGE).NativeView
@@ -152,40 +145,6 @@ else
 MANIFEST = android/AndroidManifest.xml
 endif
 
-# symlink some important files to $(ANDROID_BUILD) and let the Android
-# SDK generate build.xml
-$(ANDROID_BUILD)/build.xml: $(MANIFEST) $(PNG_FILES) | $(TARGET_BIN_DIR)/dirstamp
-	@$(NQ)echo "  ANDROID $@"
-	$(Q)rm -r -f $@ $(@D)/*_rules.xml $(@D)/AndroidManifest.xml $(@D)/src $(@D)/bin $(@D)/res/values $(@D)/res/xml
-	$(Q)mkdir -p $(ANDROID_BUILD)/res $(ANDROID_BUILD)/src/org/tophat $(ANDROID_BUILD)/src/ioio/lib/android
-	$(Q)ln -s ../../../$(MANIFEST) $(@D)/AndroidManifest.xml
-	$(Q)ln -s ../bin $(@D)/bin
-	$(Q)ln -s $(addprefix ../../../../../../,$(ANDROID_JAVA_SOURCES)) $(@D)/src/org/tophat
-	$(Q)ln -s ../../../../../../android/ioio/software/IOIOLib/src/ioio/lib/api $(ANDROID_BUILD)/src/ioio/lib/api
-	$(Q)ln -s ../../../../../../android/ioio/software/IOIOLib/src/ioio/lib/spi $(ANDROID_BUILD)/src/ioio/lib/spi
-	$(Q)ln -s ../../../../../../android/ioio/software/IOIOLib/src/ioio/lib/util $(ANDROID_BUILD)/src/ioio/lib/util
-	$(Q)ln -s ../../../../../../android/ioio/software/IOIOLib/src/ioio/lib/impl $(ANDROID_BUILD)/src/ioio/lib/impl
-	$(Q)ln -s ../../../../../../android/ioio/software/IOIOLib/target/android/src/ioio/lib/spi $(ANDROID_BUILD)/src/ioio/lib/spi2
-	$(Q)ln -s ../../../../../android/ioio/software/IOIOLib/target/android/src/ioio/lib/util/android/ContextWrapperDependent.java $(ANDROID_BUILD)/src/ioio/
-	$(Q)ln -s ../../../../../../../android/ioio/software/IOIOLibAccessory/src/ioio/lib/android/accessory $(ANDROID_BUILD)/src/ioio/lib/android/accessory
-	$(Q)ln -s ../../../../../../../android/ioio/software/IOIOLibBT/src/ioio/lib/android/bluetooth $(ANDROID_BUILD)/src/ioio/lib/android/bluetooth
-	$(Q)ln -s ../../../../../../../android/ioio/software/IOIOLibAndroidDevice/src/ioio/lib/android/device $(ANDROID_BUILD)/src/ioio/lib/android/device
-	$(Q)ln -s ../../../../android/res/values $(@D)/res/values
-	$(Q)ln -s ../../../../android/res/xml $(@D)/res/xml
-ifeq ($(HOST_IS_WIN32),y)
-	echo "now run your android build followed by exit.  For example:"
-	echo "c:\opt\android-sdk\tools\android.bat update project --path c:\xcsoar\output\android\build --target $(ANDROID_SDK_PLATFORM)"
-	cmd
-else
-	$(Q)$(ANDROID_SDK)/tools/android $(ANDROID_TOOL_OPTIONS) update project --path $(@D) --target $(ANDROID_SDK_PLATFORM)
-	$(Q)ln -s ../../../android/custom_rules.xml $(@D)/
-endif
-ifeq ($(TESTING),y)
-	$(Q)ln -s ../../../../../../android/src/testing $(@D)/src/org/tophat
-	$(Q)ln -s ../../../android/testing/testing_rules.xml $(@D)/
-endif
-	@touch $@
-
 ifeq ($(FAT_BINARY),y)
 
 # generate a "fat" APK file with binaries for all ABIs
@@ -207,13 +166,10 @@ endef
 
 # Example: $(eval $(call generate-abi,tophat))
 define generate-all-abis
-$(eval $(call generate-abi,$(1),armeabi,ANDROID))
 $(eval $(call generate-abi,$(1),armeabi-v7a,ANDROID7))
 $(eval $(call generate-abi,$(1),x86,ANDROID86))
-$(eval $(call generate-abi,$(1),mips,ANDROIDMIPS))
 $(eval $(call generate-abi,$(1),arm64-v8a,ANDROIDAARCH64))
 $(eval $(call generate-abi,$(1),x86_64,ANDROIDX64))
-# Not adding ANDROIDMIPS64, because this platform has not been tested yet.
 endef
 
 $(foreach NAME,$(ANDROID_LIB_NAMES),$(eval $(call generate-all-abis,$(NAME))))
@@ -259,22 +215,33 @@ $(NATIVE_HEADERS): $(JAVAH_DIR)/stamp
 
 endif # !FAT_BINARY
 
-$(ANDROID_BIN)/XCSoar-debug.apk: $(ANDROID_LIB_BUILD) $(ANDROID_BUILD)/build.xml $(ANDROID_BUILD)/res/drawable/icon.png $(SOUND_FILES) $(ANDROID_JAVA_SOURCES)
-	@$(NQ)echo "  ANT     $@"
-	@rm -f $@ $(patsubst %.apk,%-unaligned.apk,$@) $(@D)/classes.dex
-	$(Q)cd $(ANDROID_BUILD) && $(ANT) nodeps debug
+# Copy the generated resources and native libraries into a clean tree
+# for Gradle (its resource merger rejects our "dirstamp" files).
+ANDROID_STAGED = $(ANDROID_BUILD)/staged
+$(ANDROID_STAGED)/stamp: $(ANDROID_LIB_BUILD) $(PNG_FILES) $(SOUND_FILES)
+	@$(NQ)echo "  STAGE   $(ANDROID_STAGED)"
+	$(Q)rm -rf $(ANDROID_STAGED) && mkdir -p $(ANDROID_STAGED)
+	$(Q)cp -R $(ANDROID_BUILD)/res $(ANDROID_STAGED)/res
+	$(Q)cp -R $(ANDROID_BUILD)/libs $(ANDROID_STAGED)/jniLibs
+	$(Q)find $(ANDROID_STAGED) -name dirstamp -delete
+	@touch $@
 
-$(ANDROID_BIN)/XCSoar-release-unsigned.apk: $(ANDROID_LIB_BUILD) $(ANDROID_BUILD)/build.xml $(ANDROID_BUILD)/res/drawable/icon.png $(SOUND_FILES) $(ANDROID_JAVA_SOURCES)
-	@$(NQ)echo "  ANT     $@"
-	@rm -f $@ $(@D)/classes.dex
-	$(Q)cd $(ANDROID_BUILD) && $(ANT) nodeps release
+ANDROID_APK_DEPS = $(ANDROID_STAGED)/stamp \
+	$(ANDROID_JAVA_SOURCES) $(MANIFEST) android/build.gradle
 
-$(ANDROID_BIN)/XCSoar-release-unaligned.apk: $(ANDROID_BIN)/XCSoar-release-unsigned.apk
-	@$(NQ)echo "  SIGN    $@"
-	$(Q)$(JARSIGNER) -keystore $(ANDROID_KEYSTORE) -signedjar $@ $< $(ANDROID_KEY_ALIAS)
+$(ANDROID_BIN)/XCSoar-debug.apk: $(ANDROID_APK_DEPS) | $(ANDROID_BIN)/dirstamp
+	@$(NQ)echo "  GRADLE  $@"
+	$(Q)$(GRADLE) assembleDebug
+	$(Q)cp $(GRADLE_APK_DIR)/debug/TopHat-debug.apk $@
 
-$(ANDROID_BIN)/XCSoar.apk: $(ANDROID_BIN)/XCSoar-release-unaligned.apk
-	@$(NQ)echo "  ALIGN   $@"
-	$(Q)$(ZIPALIGN) -f 4 $< $@
+$(ANDROID_BIN)/XCSoar.apk: $(ANDROID_APK_DEPS) | $(ANDROID_BIN)/dirstamp
+	@$(NQ)echo "  GRADLE  $@"
+	$(Q)$(GRADLE) assembleRelease -PtophatKeystore=$(ANDROID_KEYSTORE) -PtophatKeyAlias=$(ANDROID_KEY_ALIAS)
+	$(Q)if [ -f $(GRADLE_APK_DIR)/release/TopHat-release.apk ]; then \
+	  cp $(GRADLE_APK_DIR)/release/TopHat-release.apk $@; \
+	else \
+	  echo "warning: $(ANDROID_KEYSTORE) not found, release APK is unsigned"; \
+	  cp $(GRADLE_APK_DIR)/release/TopHat-release-unsigned.apk $@; \
+	fi
 
 endif
