@@ -3,7 +3,10 @@ DEBUG_GLIBCXX ?= n
 
 ifeq ($(DEBUG),y)
 OPTIMIZE := -O0
+ifneq ($(CLANG),y)
+# GCC-only flag; clang warns about it on every file
 OPTIMIZE += -funit-at-a-time
+endif
 else
   OPTIMIZE := -Os
   OPTIMIZE += -DNDEBUG

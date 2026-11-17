@@ -170,7 +170,7 @@ Java_org_tophat_NativeView_initializeNative(JNIEnv *env, jobject obj,
   Vibrator::Initialise(env);
   vibrator = Vibrator::Create(env, *context);
 
-  ioio_helper = new IOIOHelper(env);
+  ioio_helper = IOIOHelper::Create(env);
 
   ScreenInitialized();
   AllowLanguage();

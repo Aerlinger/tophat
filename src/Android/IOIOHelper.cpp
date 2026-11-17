@@ -65,12 +65,21 @@ IOIOHelper::openUart(JNIEnv *env, unsigned ID, unsigned baud)
   return bridge;
 }
 
-IOIOHelper::IOIOHelper(JNIEnv *env)
+IOIOHelper *
+IOIOHelper::Create(JNIEnv *env)
 {
   jobject obj = env->NewObject(cls, ctor);
-  assert(obj != nullptr);
+  if (obj == nullptr) {
+    env->ExceptionClear();
+    return nullptr;
+  }
 
-  Set(env, obj);
-
+  IOIOHelper *helper = new IOIOHelper(env, obj);
   env->DeleteLocalRef(obj);
+  return helper;
+}
+
+IOIOHelper::IOIOHelper(JNIEnv *env, jobject obj)
+{
+  Set(env, obj);
 }

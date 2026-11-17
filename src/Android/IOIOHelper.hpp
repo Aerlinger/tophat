@@ -45,8 +45,17 @@ public:
   static bool Initialise(JNIEnv *env);
   static void Deinitialise(JNIEnv *env);
 
-  IOIOHelper(JNIEnv *env);
+  /**
+   * Create the Java IOIOHelper.  Returns nullptr (and clears the Java
+   * exception) if construction fails, e.g. because a runtime
+   * permission was denied.
+   */
+  static IOIOHelper *Create(JNIEnv *env);
 
+private:
+  IOIOHelper(JNIEnv *env, jobject obj);
+
+public:
   ~IOIOHelper() {
     shutdown(Java::GetEnv());
   }

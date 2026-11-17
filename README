@@ -40,6 +40,34 @@ can download it on the XCSoar website:
  http://www.xcsoar.org/discover/manual.html
 
 ---------------------
+Android build of Top Hat:
+
+Requirements: JDK 17, Android SDK (platform 35, build-tools 35),
+Android NDK r27 (27.2.12479018), GNU make 4, librsvg (rsvg-convert),
+ImageMagick and vorbis-tools (oggenc).  On macOS:
+
+ brew install openjdk@17 make librsvg imagemagick vorbis-tools
+ sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+
+Fetch the submodules, then build (use "gmake" on macOS):
+
+ git submodule update --init android/ioio lib/boost/*
+ export ANDROID_HOME=~/Library/Android/sdk
+ export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018
+ make TARGET=ANDROID                        # arm64, debug APK
+ make TARGET=ANDROID DEBUG=n output/ANDROID/bin/XCSoar.apk   # release
+
+Other targets: ANDROID7 (armeabi-v7a), ANDROID86 (x86), ANDROIDX64
+(x86_64), ANDROIDFAT (all four ABIs in one APK).  The Makefile builds
+the native library and resources; the APK itself is packaged by Gradle
+(android/build.gradle).  Release signing reads ANDROID_KEYSTORE,
+ANDROID_KEY_ALIAS and the ANDROID_KEYSTORE_PASS environment variable.
+
+On Android 10 and newer, data files live in
+Android/data/org.tophat/files/XCSoarData (reachable over USB); an
+existing writable XCSoarData folder on older devices is still used.
+
+---------------------
 Kobo build of Top Hat:
 
 Please refer to the help file kobo/README.kobo.txt in the Top Hat source code

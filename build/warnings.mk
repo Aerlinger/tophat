@@ -20,7 +20,11 @@ CFLAGS += -Wnested-externs
 
 # make warnings fatal (for perfectionists)
 
-ifneq ($(TARGET),CYGWIN)
+ifeq ($(TARGET),ANDROID)
+# modern NDK clang emits ~300 new warnings (mostly deprecations) on this
+# legacy code; keep them non-fatal until they are cleaned up
+WERROR ?= n
+else ifneq ($(TARGET),CYGWIN)
 WERROR ?= $(DEBUG)
 endif
 
