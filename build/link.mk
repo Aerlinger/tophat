@@ -166,12 +166,8 @@ $$($(2)_OBJS): CPPFLAGS += $$($(2)_CPPFLAGS)
 $$($(2)_OBJS): CPPFLAGS += $(patsubst %,$$(%_CPPFLAGS),$($(2)_DEPENDS))
 
 # Link the unstripped binary
-ifneq ($(HOST_IS_DARWIN),y)
-$$($(2)_NOSTRIP): LDFLAGS += -Wl,-shared,-Bsymbolic
-endif
-
-ifeq ($$(TARGET),ANDROID)
-$$($(2)_NOSTRIP): LDFLAGS += -nostdlib
+ifneq ($(TARGET_IS_DARWIN),y)
+$$($(2)_NOSTRIP): LDFLAGS += -shared -Wl,-Bsymbolic
 endif
 
 $$($(2)_NOSTRIP): $$($(2)_OBJS) $$($(2)_LDADD) $$(TARGET_LDADD) | $$(TARGET_BIN_DIR)/dirstamp

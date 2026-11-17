@@ -9,11 +9,7 @@ ANDROID_KEY_ALIAS ?= mk
 ANDROID_BUILD = $(TARGET_OUTPUT_DIR)/build
 ANDROID_BIN = $(TARGET_BIN_DIR)
 
-ifeq ($(HOST_IS_DARWIN),y)
-  ANDROID_SDK ?= $(HOME)/opt/android-sdk-macosx
-else
-  ANDROID_SDK ?= $(HOME)/opt/android-sdk-linux
-endif
+ANDROID_SDK ?= $(firstword $(ANDROID_HOME) $(ANDROID_SDK_ROOT) $(wildcard $(HOME)/Library/Android/sdk) $(wildcard $(HOME)/Android/Sdk))
 ANDROID_SDK_PLATFORM_DIR = $(ANDROID_SDK)/platforms/$(ANDROID_SDK_PLATFORM)
 ANDROID_ABI_DIR = $(ANDROID_BUILD)/libs/$(ANDROID_ABI5)
 
@@ -242,15 +238,24 @@ ANDROID_LIB_BUILD = $(patsubst %,$(ANDROID_ABI_DIR)/lib%.so,$(ANDROID_LIB_NAMES)
 $(ANDROID_LIB_BUILD): $(ANDROID_ABI_DIR)/lib%.so: $(TARGET_BIN_DIR)/lib%.so $(ANDROID_ABI_DIR)/dirstamp
 	$(Q)cp $< $@
 
-$(ANDROID_BUILD)/bin/classes/$(CLASS_CLASS): $(NATIVE_SOURCES) $(ANDROID_BUILD)/build.xml $(ANDROID_BUILD)/res/drawable/icon.png $(SOUND_FILES)
-	@$(NQ)echo "  ANT     $@"
-	$(Q)cd $(ANDROID_BUILD) && $(ANT) nodeps compile-jni-classes
+# Generate JNI headers with "javac -h" (javah was removed in JDK 10).
+# Only the classes with native methods are compiled; the rest of the
+# package is resolved through -sourcepath (via a symlinked package tree,
+# because android/src is flat).
+JAVAH_DIR = $(TARGET_OUTPUT_DIR)/javah
+IOIO_SRC = android/ioio/software
+JAVAH_SOURCEPATH = $(JAVAH_DIR)/src:$(IOIO_SRC)/IOIOLib/src:$(IOIO_SRC)/IOIOLib/target/android/src:$(IOIO_SRC)/IOIOLibAccessory/src:$(IOIO_SRC)/IOIOLibBT/src:$(IOIO_SRC)/IOIOLibAndroidDevice/src
+
+$(JAVAH_DIR)/stamp: $(NATIVE_SOURCES) | $(TARGET_OUTPUT_DIR)/include/dirstamp
+	@$(NQ)echo "  JAVAC -h $(TARGET_OUTPUT_DIR)/include"
+	$(Q)rm -rf $(JAVAH_DIR) && mkdir -p $(JAVAH_DIR)/src/org
+	$(Q)ln -s $(abspath android/src) $(JAVAH_DIR)/src/org/tophat
+	$(Q)javac -nowarn -implicit:none -h $(TARGET_OUTPUT_DIR)/include -d $(JAVAH_DIR)/classes \
+	  -cp $(ANDROID_SDK_PLATFORM_DIR)/android.jar -sourcepath $(JAVAH_SOURCEPATH) \
+	  $(patsubst %,$(JAVAH_DIR)/src/org/tophat/%.java,$(NATIVE_CLASSES))
 	@touch $@
 
-$(NATIVE_HEADERS): $(NATIVE_PREFIX)%.h: android/src/%.java $(ANDROID_BUILD)/bin/classes/$(CLASS_CLASS)
-	@$(NQ)echo "  JAVAH   $@"
-	$(Q)javah -classpath $(ANDROID_SDK_PLATFORM_DIR)/android.jar:$(ANDROID_BUILD)/bin/classes -d $(@D) $(subst _,.,$(patsubst $(patsubst ./%,%,$(TARGET_OUTPUT_DIR))/include/%.h,%,$@))
-	@touch $@
+$(NATIVE_HEADERS): $(JAVAH_DIR)/stamp
 
 endif # !FAT_BINARY
 

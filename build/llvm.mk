@@ -26,10 +26,7 @@ endif
 
 ifeq ($(TARGET),ANDROID)
   TARGET_ARCH := $(filter-out -mthumb-interwork,$(TARGET_ARCH))
-  TARGET_ARCH += -gcc-toolchain $(ANDROID_GCC_TOOLCHAIN)
-  TARGET_ARCH += -integrated-as
   TARGET_CPPFLAGS += -DBIONIC -DLIBCPP_NO_IOSTREAM
-  TARGET_LDLIBS += -latomic
 endif # Android
 
 ifeq ($(TARGET_IS_PI),y)
