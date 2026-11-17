@@ -266,6 +266,10 @@ ManagedFilePickAndDownloadWidget::EnhanceAreaNames()
   area_map["eu"] = AvailableFile {"", "", "", NarrowString<25ul>("Europe"), NarrowString<25ul>("Europe"), FileType::UNKNOWN};
   area_map["fi"] = AvailableFile {"", "", "", NarrowString<25ul>("Europe"), NarrowString<25ul>("Finland"), FileType::UNKNOWN};
   area_map["fr"] = AvailableFile {"", "", "", NarrowString<25ul>("Europe"), NarrowString<25ul>("France"), FileType::UNKNOWN};
+  area_map["gb"] = AvailableFile {"", "", "", NarrowString<25ul>("Europe"), NarrowString<25ul>("United Kingdom"), FileType::UNKNOWN};
+  area_map["mw"] = AvailableFile {"", "", "", NarrowString<25ul>("Africa"), NarrowString<25ul>("Malawi"), FileType::UNKNOWN};
+  area_map["tr"] = AvailableFile {"", "", "", NarrowString<25ul>("Europe"), NarrowString<25ul>("Turkey"), FileType::UNKNOWN};
+  area_map["ua"] = AvailableFile {"", "", "", NarrowString<25ul>("Europe"), NarrowString<25ul>("Ukraine"), FileType::UNKNOWN};
   area_map["hr"] = AvailableFile {"", "", "", NarrowString<25ul>("Europe"), NarrowString<25ul>("Croatia"), FileType::UNKNOWN};
   area_map["hu"] = AvailableFile {"", "", "", NarrowString<25ul>("Europe"), NarrowString<25ul>("Hungary"), FileType::UNKNOWN};
   area_map["ie"] = AvailableFile {"", "", "", NarrowString<25ul>("Europe"), NarrowString<25ul>("Ireland"), FileType::UNKNOWN};
@@ -304,10 +308,10 @@ ManagedFilePickAndDownloadWidget::EnhanceAreaNames()
 const char*
 ManagedFilePickAndDownloadWidget::GetRepositoryUri(FileType type)
 {
-#define REPOSITORY_MAP_URI "http://download.xcsoar.org/repository"
+#define REPOSITORY_MAP_URI "https://download.xcsoar.org/repository"
 //#define REPOSITORY_URI          "http://downloads.tophatsoaring.org/repository/repository_waypoint_tophat.txt"
-#define REPOSITORY_WAYPOINT_URI "http://www.tophatsoaring.org/downloads/repository/repository_waypoint_tophat.txt"
-#define REPOSITORY_AIRSPACE_URI "http://www.tophatsoaring.org/downloads/repository/repository_airspace_tophat.txt"
+#define REPOSITORY_WAYPOINT_URI "https://www.tophatsoaring.org/downloads/repository/repository_waypoint_tophat.txt"
+#define REPOSITORY_AIRSPACE_URI "https://www.tophatsoaring.org/downloads/repository/repository_airspace_tophat.txt"
 
 
   switch (type) {
@@ -470,6 +474,9 @@ ManagedFilePickAndDownloadWidget::BuildAreaFilter(FileRepository &repository)
   area_vector.clear();
   for (auto i = repository.begin(), end = repository.end(); i != end; ++i) {
     const AvailableFile &remote_file = *i;
+    if (file_filter.type != FileType::UNKNOWN &&
+        remote_file.type != file_filter.type)
+      continue;
     std::string temp = remote_file.GetArea();
     if (area_map.find(temp) == area_map.end()) {
       area_map.insert(std::pair<std::string, int>(temp,0));
@@ -508,6 +515,9 @@ ManagedFilePickAndDownloadWidget::BuildSubAreaFilter(FileRepository &repository,
   subarea_vector.clear();
   for (auto i = repository.begin(), end = repository.end(); i != end; ++i) {
     const AvailableFile &remote_file = *i;
+    if (file_filter.type != FileType::UNKNOWN &&
+        remote_file.type != file_filter.type)
+      continue;
     std::string area = remote_file.GetArea();
 
     if ((area_filter == nullptr) || (area == area_filter)) {
